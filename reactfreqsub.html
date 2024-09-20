@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Sound Frequency Visualization</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #ffffff; /* Background color */
+        }
+        .container {
+            width: 500px; /* Width of the box */
+            height: 300px; /* Height of the box */
+            border: 2px solid #000000; /* Border color */
+            position: relative;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .subtitle {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 16px;
+            color: #000000; /* Subtitle text color */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <canvas id="frequencyCanvas"></canvas>
+    </div>
+    <div class="subtitle" id="subtitle">Listening...</div> <!-- Subtitle placeholder -->
+    <script>
+        const canvas = document.getElementById('frequencyCanvas');
+        const ctx = canvas.getContext('2d');
+        const subtitle = document.getElementById('subtitle');
+
+        const container = document.querySelector('.container');
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+
+        const numFrequencies = 50; // Number of frequency bars
+        const barSpacing = 2; // Space between bars
+        const barWidth = (canvas.width / numFrequencies) - barSpacing; // Width of each bar with spacing
+        const maxBarHeight = canvas.height; // Max height of the bars
+
+        let audioContext;
+        let analyser;
+        let source;
+
+        document.addEventListener('click', () => {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                // Initialize your audio processing here
+            } else {
+                audioContext.resume().then(() => {
+                    console.log('AudioContext resumed');
+                });
+            }
+        });
+
+        async function initializeAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                source = audioContext.createMediaStreamSource(stream);
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256; // Number of values in frequency data
+                source.connect(analyser);
+                drawFrequencyBars();
+                startSpeechRecognition(); // Start speech recognition
+            } catch (err) {
+                console.error('Error accessing audio stream:', err);
+            }
+        }
+
+        function drawFrequencyBars() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            for (let i = 0; i < numFrequencies; i++) {
+                const barHeight = (dataArray[i] / 255) * maxBarHeight;
+                const x = i * (barWidth + barSpacing); // Position with spacing
+                const y = canvas.height - barHeight;
+
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.roundRect(x, y, barWidth, barHeight, 5); // Rounded corners with radius 5
+                ctx.fill();
+            }
+
+            requestAnimationFrame(drawFrequencyBars);
+        }
+
+        function startSpeechRecognition() {
+            // Check if the Web Speech API is supported
+            if (!('webkitSpeechRecognition' in window)) {
+                console.log('Web Speech API not supported');
+                subtitle.textContent = 'Speech recognition not supported in this browser.';
+                return;
+            }
+
+            const recognition = new webkitSpeechRecognition(); // Create a new instance of SpeechRecognition
+            recognition.continuous = true; // Keep recognizing until manually stopped
+            recognition.interimResults = true; // Show intermediate results
+            recognition.lang = 'en-US'; // Language
+
+            recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                subtitle.textContent = transcript; // Update subtitle with recognized speech
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                subtitle.textContent = 'Speech recognition error.';
+            };
+
+            recognition.onend = () => {
+                console.log('Speech recognition ended.');
+                subtitle.textContent = 'Speech recognition ended.';
+            };
+
+            recognition.start(); // Start speech recognition
+        }
+
+        initializeAudio();
+
+        window.addEventListener('resize', () => {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        });
+    </script>
+</body>
+</html>
